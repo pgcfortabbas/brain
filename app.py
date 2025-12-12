@@ -7,14 +7,18 @@ import os
 import requests 
 
 # --- Google Drive Configuration ---
-GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
+# *** UPDATED FILE ID ***
+GDRIVE_FILE_ID = '18LzThwAFDKJQH99vyYcJAtdUPyaHvCZ5'
+# Using .h5 extension for maximum Keras compatibility
 MODEL_PATH = 'brain_tumor_cnn_model.h5' 
 
 # --- Utility Function to Download from Google Drive (Robust version) ---
 def download_file_from_google_drive(file_id, destination):
-    # ... (Robust download function as provided in the previous response)
+    """Downloads a file from a public Google Drive link, bypassing the large file warning."""
     URL = "https://docs.google.com/uc?export=download"
     session = requests.Session()
+    
+    # Initial request to check for the warning token
     response = session.get(URL, params={'id': file_id}, stream=True)
     
     token = None
@@ -24,14 +28,19 @@ def download_file_from_google_drive(file_id, destination):
             break
 
     params = {'id': file_id}
+    
+    # If a token is found, add the confirmation parameter
     if token:
         st.info("Bypassing Google Drive large file warning...")
         params['confirm'] = token
         
+    # Final request for the actual file content
     response = session.get(URL, params=params, stream=True)
     
+    # Check for HTML content (indicates failure)
     if 'text/html' in response.headers.get('content-type', ''):
-        st.error("Download Failed: The response was HTML, not the model file. Check permissions.")
+        st.error("Download Failed: The response was HTML, not the model file.")
+        st.error("Please check that the Google Drive file is set to 'Anyone with the link'.")
         raise Exception("Google Drive link is inaccessible or non-public.")
 
     response.raise_for_status()
@@ -49,10 +58,12 @@ def download_file_from_google_drive(file_id, destination):
                 if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
+                    # Update progress bar
                     progress_bar.progress(min(100, int((downloaded_size / total_size) * 100)))
         
+        # Check for zero-byte file
         if downloaded_size == 0:
-            raise Exception("Zero-byte file downloaded.")
+            raise Exception("Zero-byte file downloaded. The link is likely invalid or inaccessible.")
 
         progress_bar.progress(100)
         st.success("Model downloaded successfully!")
@@ -65,7 +76,7 @@ def download_file_from_google_drive(file_id, destination):
         progress_bar.empty()
 
 
-# Set Streamlit page config (as before)
+# Set Streamlit page config
 st.set_page_config(
     page_title="Brain Tumor Classification",
     page_icon="🧠",
@@ -78,6 +89,7 @@ st.set_page_config(
 def load_model():
     model_path = MODEL_PATH
     
+    # Logic to check and download the file if it doesn't exist locally
     if not os.path.exists(model_path):
         st.warning(f"Model file not found at: {model_path}. Attempting to download from Google Drive...")
         try:
@@ -89,26 +101,24 @@ def load_model():
     # Load the model
     try:
         with st.spinner(f"Loading model from {model_path}..."):
-            # Using safe_mode=False for compatibility
+            # Using safe_mode=False for compatibility with H5 format
             model = tf.keras.models.load_model(model_path, safe_mode=False) 
         st.success("Model loaded!")
         return model
     except Exception as e:
-        # This is the final error you are seeing.
         st.error(f"Error loading model: {e}")
-        st.error("FINAL TROUBLESHOOTING: The file downloaded is corrupted. You *must* verify the Google Drive file's sharing setting is set to **'Anyone with the link'**.")
+        st.error("Troubleshooting: This error occurs when the downloaded file is corrupted. Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
         return None
 
 model = load_model()
 
 # --- Define image preprocessing function ---
 def preprocess_image(img_data):
-    # ... (Pre-processing function body remains the same)
     img = Image.open(img_data)
-    img = img.resize((150, 150))
+    img = img.resize((150, 150)) # Ensure this matches img_width, img_height from training
     img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = img_array / 255.0
+    img_array = np.expand_dims(img_array, axis=0) # Create a batch dimension
+    img_array = img_array / 255.0 # Rescale pixels to [0, 1] as done during training
     return img_array
 
 # --- Streamlit UI ---
@@ -116,18 +126,23 @@ st.title("🧠 Brain Tumor Classification")
 st.markdown("Upload a brain MRI image to get a tumor classification prediction.")
 
 if model is None:
-    st.warning("Model could not be loaded. Please correct the Google Drive file permissions and restart the app.")
+    st.warning("Model could not be loaded. Please ensure the Google Drive file (`18LzThwAFDKJQH99vyYcJAtdUPyaHvCZ5`) is **publicly accessible**.")
 else:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-    # ... (Rest of the Streamlit UI code remains the same)
+
     if uploaded_file is not None:
         st.image(uploaded_file, caption='Uploaded MRI Image', use_column_width=True)
         st.write("")
         st.write("Classifying...")
+
+        # Preprocess the image
         processed_image = preprocess_image(uploaded_file)
+
+        # Make prediction
         with st.spinner("Analyzing image..."):
             predictions = model.predict(processed_image)
         
+        # Assuming class labels are in the same order as train_generator.class_indices
         class_labels = ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
         predicted_class_index = np.argmax(predictions, axis=1)[0]
         predicted_class_label = class_labels[predicted_class_index]
