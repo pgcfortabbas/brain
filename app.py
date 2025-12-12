@@ -4,7 +4,7 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
 import os
-import requests # Necessary for downloading files from the internet
+import requests 
 
 # --- Configuration ---
 # File ID from the Google Drive link provided:
@@ -151,15 +151,20 @@ else:
 
         st.markdown("---")
         st.markdown("### About the Model")
+        
+        # --- FIX APPLIED HERE: Using triple quotes (multiline string) ---
         st.markdown(
-            "This model is a Convolutional Neural Network 
+            """
+            This model is a **Convolutional Neural Network (CNN)** 
 
 [Image of Convolutional Neural Network Architecture]
- trained to classify brain MRI images 
+ 
+            trained to classify brain MRI images 
 
 [Image of Brain MRI with Tumor]
- into one of four categories: "
-            "Glioma Tumor, Meningioma Tumor, No Tumor, or Pituitary Tumor."
+ into one of four categories: 
+            **Glioma Tumor**, **Meningioma Tumor**, **No Tumor**, or **Pituitary Tumor**.
+            """
         )
         st.markdown(
             "**Disclaimer**: This is a demo for educational purposes and should not be used for medical diagnosis."
