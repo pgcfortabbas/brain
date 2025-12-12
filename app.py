@@ -4,21 +4,32 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
 import os
-import requests 
+import requests # Necessary for downloading files from the internet
 
-# --- Google Drive Configuration ---
-# *** UPDATED FILE ID ***
-GDRIVE_FILE_ID = '12Zm-LJUT3_iQW-4Hu1SXnybgHyKXlo04'
-# Using .h5 extension for maximum Keras compatibility
-MODEL_PATH = 'model.keros' 
+# --- Configuration ---
+# File ID from the Google Drive link provided:
+GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
+# We use .h5 for the local file path to ensure maximum compatibility with tf.keras.models.load_model
+MODEL_PATH = 'brain_tumor_cnn_model.h5' 
 
-# --- Utility Function to Download from Google Drive (Robust version) ---
+# Set Streamlit page config
+st.set_page_config(
+    page_title="Brain Tumor Classification",
+    page_icon="🧠",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+
+# --- Utility Function to Download from Google Drive ---
 def download_file_from_google_drive(file_id, destination):
-    """Downloads a file from a public Google Drive link, bypassing the large file warning."""
+    """
+    Downloads a file from a public Google Drive link, bypassing the large file warning,
+    and checks for valid file content.
+    """
     URL = "https://docs.google.com/uc?export=download"
     session = requests.Session()
     
-    # Initial request to check for the warning token
+    # 1. Initial request to check for the warning token
     response = session.get(URL, params={'id': file_id}, stream=True)
     
     token = None
@@ -28,19 +39,16 @@ def download_file_from_google_drive(file_id, destination):
             break
 
     params = {'id': file_id}
-    
-    # If a token is found, add the confirmation parameter
     if token:
         st.info("Bypassing Google Drive large file warning...")
         params['confirm'] = token
         
-    # Final request for the actual file content
+    # 2. Final request for the actual file content
     response = session.get(URL, params=params, stream=True)
     
-    # Check for HTML content (indicates failure)
+    # Check for HTML content (indicates failure due to restricted access)
     if 'text/html' in response.headers.get('content-type', ''):
-        st.error("Download Failed: The response was HTML, not the model file.")
-        st.error("Please check that the Google Drive file is set to 'Anyone with the link'.")
+        st.error("Download Failed: The response was HTML, not the model file. Check permissions.")
         raise Exception("Google Drive link is inaccessible or non-public.")
 
     response.raise_for_status()
@@ -58,10 +66,8 @@ def download_file_from_google_drive(file_id, destination):
                 if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
-                    # Update progress bar
                     progress_bar.progress(min(100, int((downloaded_size / total_size) * 100)))
         
-        # Check for zero-byte file
         if downloaded_size == 0:
             raise Exception("Zero-byte file downloaded. The link is likely invalid or inaccessible.")
 
@@ -76,20 +82,12 @@ def download_file_from_google_drive(file_id, destination):
         progress_bar.empty()
 
 
-# Set Streamlit page config
-st.set_page_config(
-    page_title="Brain Tumor Classification",
-    page_icon="🧠",
-    layout="centered",
-    initial_sidebar_state="expanded",
-)
-
 # --- Load the trained model ---
 @st.cache_resource
 def load_model():
     model_path = MODEL_PATH
     
-    # Logic to check and download the file if it doesn't exist locally
+    # Check if the model is downloaded, if not, download it
     if not os.path.exists(model_path):
         st.warning(f"Model file not found at: {model_path}. Attempting to download from Google Drive...")
         try:
@@ -107,7 +105,7 @@ def load_model():
         return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        st.error("Troubleshooting: This error occurs when the downloaded file is corrupted. Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
+        st.error("Troubleshooting: Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
         return None
 
 model = load_model()
@@ -115,10 +113,10 @@ model = load_model()
 # --- Define image preprocessing function ---
 def preprocess_image(img_data):
     img = Image.open(img_data)
-    img = img.resize((150, 150)) # Ensure this matches img_width, img_height from training
+    img = img.resize((150, 150)) # Input size from training
     img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0) # Create a batch dimension
-    img_array = img_array / 255.0 # Rescale pixels to [0, 1] as done during training
+    img_array = np.expand_dims(img_array, axis=0) # Add batch dimension
+    img_array = img_array / 255.0 # Rescale
     return img_array
 
 # --- Streamlit UI ---
@@ -126,7 +124,7 @@ st.title("🧠 Brain Tumor Classification")
 st.markdown("Upload a brain MRI image to get a tumor classification prediction.")
 
 if model is None:
-    st.warning("Model could not be loaded. Please ensure the Google Drive file (`18LzThwAFDKJQH99vyYcJAtdUPyaHvCZ5`) is **publicly accessible**.")
+    st.warning("Model could not be loaded. Please ensure the Google Drive file is public and try again.")
 else:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
@@ -142,7 +140,7 @@ else:
         with st.spinner("Analyzing image..."):
             predictions = model.predict(processed_image)
         
-        # Assuming class labels are in the same order as train_generator.class_indices
+        # Class labels
         class_labels = ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
         predicted_class_index = np.argmax(predictions, axis=1)[0]
         predicted_class_label = class_labels[predicted_class_index]
@@ -154,7 +152,13 @@ else:
         st.markdown("---")
         st.markdown("### About the Model")
         st.markdown(
-            "This model is a Convolutional Neural Network trained to classify brain MRI images into one of four categories: "
+            "This model is a Convolutional Neural Network 
+
+[Image of Convolutional Neural Network Architecture]
+ trained to classify brain MRI images 
+
+[Image of Brain MRI with Tumor]
+ into one of four categories: "
             "Glioma Tumor, Meningioma Tumor, No Tumor, or Pituitary Tumor."
         )
         st.markdown(
