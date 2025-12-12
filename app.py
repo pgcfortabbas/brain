@@ -10,7 +10,7 @@ import requests
 # *** UPDATED FILE ID ***
 GDRIVE_FILE_ID = '18LzThwAFDKJQH99vyYcJAtdUPyaHvCZ5'
 # Using .h5 extension for maximum Keras compatibility
-MODEL_PATH = 'brain_tumor_cnn_model.h5' 
+MODEL_PATH = 'model.keros' 
 
 # --- Utility Function to Download from Google Drive (Robust version) ---
 def download_file_from_google_drive(file_id, destination):
