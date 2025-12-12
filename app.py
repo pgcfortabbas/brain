@@ -4,15 +4,17 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
 import os
-import requests 
+import requests # <--- ADDED: Needed for downloading the model from Google Drive
 
 # --- Google Drive Configuration ---
 # File ID extracted from your link:
 GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
-# Changed to .h5 for better compatibility with Keras load_model
+# Changed to .h5 for better compatibility with Keras load_model, which often fails
+# to read H5 models saved with a .keras extension.
 MODEL_PATH = 'brain_tumor_cnn_model.h5' 
 
 # --- Utility Function to Download from Google Drive (Robust version) ---
+# <--- ADDED: This function handles the download from the public Google Drive link.
 def download_file_from_google_drive(file_id, destination):
     """Downloads a file from a public Google Drive link, bypassing the large file warning."""
     URL = "https://docs.google.com/uc?export=download"
@@ -87,8 +89,9 @@ st.set_page_config(
 # --- Load the trained model ---
 @st.cache_resource
 def load_model():
-    model_path = MODEL_PATH
+    model_path = MODEL_PATH # <--- CHANGED: Using the .h5 path
     
+    # Logic to check and download the file if it doesn't exist locally
     if not os.path.exists(model_path):
         st.warning(f"Model file not found at: {model_path}. Attempting to download from Google Drive...")
         try:
@@ -100,13 +103,13 @@ def load_model():
     # Load the model
     try:
         with st.spinner(f"Loading model from {model_path}..."):
-            # Using safe_mode=False for compatibility
+            # Using safe_mode=False for compatibility with H5 format
             model = tf.keras.models.load_model(model_path, safe_mode=False) 
         st.success("Model loaded!")
         return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        st.error("Troubleshooting: If the Google Drive file is an H5 file, it should now load correctly after setting the path to '.h5'. If this error persists, the downloaded file is corrupted/invalid.")
+        st.error("Troubleshooting: This may still fail if the downloaded file is corrupted. Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
         return None
 
 model = load_model()
@@ -114,10 +117,10 @@ model = load_model()
 # --- Define image preprocessing function ---
 def preprocess_image(img_data):
     img = Image.open(img_data)
-    img = img.resize((150, 150))
+    img = img.resize((150, 150)) # Ensure this matches img_width, img_height from training
     img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = img_array / 255.0
+    img_array = np.expand_dims(img_array, axis=0) # Create a batch dimension
+    img_array = img_array / 255.0 # Rescale pixels to [0, 1] as done during training
     return img_array
 
 # --- Streamlit UI ---
@@ -125,7 +128,7 @@ st.title("🧠 Brain Tumor Classification")
 st.markdown("Upload a brain MRI image to get a tumor classification prediction.")
 
 if model is None:
-    st.warning("Model could not be loaded. Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
+    st.warning("Model could not be loaded. Please ensure the Google Drive file is **publicly accessible** and you have `requests` installed.")
 else:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
@@ -141,6 +144,7 @@ else:
         with st.spinner("Analyzing image..."):
             predictions = model.predict(processed_image)
         
+        # Assuming class labels are in the same order as train_generator.class_indices
         class_labels = ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
         predicted_class_index = np.argmax(predictions, axis=1)[0]
         predicted_class_label = class_labels[predicted_class_index]
