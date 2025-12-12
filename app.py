@@ -7,26 +7,21 @@ import os
 import requests 
 
 # --- Google Drive Configuration ---
+# File ID extracted from your link:
 GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
-# Keep the .h5 extension as planned for compatibility
+# Changed to .h5 for better compatibility with Keras load_model
 MODEL_PATH = 'brain_tumor_cnn_model.h5' 
 
-# --- Utility Function to Download from Google Drive (MORE ROBUST) ---
+# --- Utility Function to Download from Google Drive (Robust version) ---
 def download_file_from_google_drive(file_id, destination):
-    """
-    Downloads a file from a public Google Drive link, ensuring all parameters 
-    are passed correctly to bypass the large file warning.
-    """
-    # The URL pattern for downloading Google Drive files
+    """Downloads a file from a public Google Drive link, bypassing the large file warning."""
     URL = "https://docs.google.com/uc?export=download"
-    
     session = requests.Session()
     
-    # 1. Initial request to check for the warning token
+    # Initial request to check for the warning token
     response = session.get(URL, params={'id': file_id}, stream=True)
     
     token = None
-    # Check for the confirmation token (for files over 100MB)
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             token = value
@@ -34,56 +29,46 @@ def download_file_from_google_drive(file_id, destination):
 
     params = {'id': file_id}
     
-    # 2. Add the token to the parameters if found
+    # If a token is found, add the confirmation parameter
     if token:
         st.info("Bypassing Google Drive large file warning...")
         params['confirm'] = token
         
-    # 3. Final request for the actual file content
+    # Final request for the actual file content
     response = session.get(URL, params=params, stream=True)
     
-    # Check for HTML content, which indicates a failure
+    # Check for HTML content (indicates failure)
     if 'text/html' in response.headers.get('content-type', ''):
         st.error("Download Failed: The response was HTML, not the model file.")
-        st.error("This usually means the Google Drive link is not public or requires login.")
+        st.error("Please check that the Google Drive file is set to 'Anyone with the link'.")
         raise Exception("Google Drive link is inaccessible or non-public.")
 
-    # Check for bad HTTP status codes (e.g., 404, 403)
     response.raise_for_status()
 
-    # Get total file size for progress bar and sanity check
     total_size = int(response.headers.get('content-length', 0))
-    
-    # --- CRITICAL SANITY CHECK ---
-    if total_size < 1024 * 1024 * 10: # Check if size is less than 10MB (A guess, but 0.00 MB is definitely wrong)
-        # Note: We're not raising an error here, but we check for 0 bytes later
-        pass
-
-    block_size = 8192 # 8 KiB chunks
+    block_size = 8192
     
     st.info(f"Downloading model (approx. {total_size / (1024*1024):.2f} MB)...")
     progress_bar = st.progress(0)
 
-    # Download the file with streaming
     try:
         downloaded_size = 0
         with open(destination, 'wb') as f:
             for chunk in response.iter_content(chunk_size=block_size):
-                if chunk:  # filter out keep-alive new chunks
+                if chunk:
                     f.write(chunk)
                     downloaded_size += len(chunk)
                     # Update progress bar
                     progress_bar.progress(min(100, int((downloaded_size / total_size) * 100)))
         
-        # --- CRITICAL ZERO-BYTE CHECK ---
+        # Check for zero-byte file
         if downloaded_size == 0:
             raise Exception("Zero-byte file downloaded. The link is likely invalid or inaccessible.")
 
-        progress_bar.progress(100) # Ensure it reaches 100%
+        progress_bar.progress(100)
         st.success("Model downloaded successfully!")
 
     except Exception as e:
-        # Clean up the file if the download was interrupted or failed
         if os.path.exists(destination):
             os.remove(destination)
         raise e
@@ -91,7 +76,7 @@ def download_file_from_google_drive(file_id, destination):
         progress_bar.empty()
 
 
-# Set Streamlit page config (remaining part of the script)
+# Set Streamlit page config
 st.set_page_config(
     page_title="Brain Tumor Classification",
     page_icon="🧠",
@@ -104,7 +89,6 @@ st.set_page_config(
 def load_model():
     model_path = MODEL_PATH
     
-    # Check if the model is already downloaded, if not, download it
     if not os.path.exists(model_path):
         st.warning(f"Model file not found at: {model_path}. Attempting to download from Google Drive...")
         try:
@@ -116,20 +100,19 @@ def load_model():
     # Load the model
     try:
         with st.spinner(f"Loading model from {model_path}..."):
-            # Ensure safe_mode=False is used for H5 files
+            # Using safe_mode=False for compatibility
             model = tf.keras.models.load_model(model_path, safe_mode=False) 
         st.success("Model loaded!")
         return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        st.error("Troubleshooting: Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link can view').")
+        st.error("Troubleshooting: If the Google Drive file is an H5 file, it should now load correctly after setting the path to '.h5'. If this error persists, the downloaded file is corrupted/invalid.")
         return None
 
 model = load_model()
 
 # --- Define image preprocessing function ---
 def preprocess_image(img_data):
-    # ... (Keep the preprocess_image function as is)
     img = Image.open(img_data)
     img = img.resize((150, 150))
     img_array = image.img_to_array(img)
@@ -142,7 +125,7 @@ st.title("🧠 Brain Tumor Classification")
 st.markdown("Upload a brain MRI image to get a tumor classification prediction.")
 
 if model is None:
-    st.warning("Model could not be loaded. **Please check the Google Drive sharing settings for the file ID: 1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE**.")
+    st.warning("Model could not be loaded. Please ensure the Google Drive file is **publicly accessible** (set to 'Anyone with the link').")
 else:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
