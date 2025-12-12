@@ -4,14 +4,13 @@ from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
 import os
-import requests 
-from huggingface_hub import hf_hub_download # New dependency for reliable download
+import requests # Required for downloading the model file
 
-# --- Hugging Face Configuration ---
-# IMPORTANT: Replace 'your-username/brain-tumor-model' with your actual Hugging Face repository ID
-HF_REPO_ID = 'your-username/brain-tumor-model' 
-HF_FILENAME = 'brain_tumor_cnn_model.h5' 
-MODEL_PATH = HF_FILENAME 
+# --- Configuration ---
+# File ID from the Google Drive link provided:
+GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
+# Using .h5 for the local file path to ensure maximum compatibility with tf.keras.models.load_model
+MODEL_PATH = 'brain_tumor_cnn_model.h5' 
 
 # Set Streamlit page config
 st.set_page_config(
@@ -21,28 +20,80 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# --- Utility Function to Download from Google Drive ---
+def download_file_from_google_drive(file_id, destination):
+    """
+    Downloads a file from a public Google Drive link, bypassing the large file warning,
+    and checks for valid file content.
+    """
+    URL = "https://docs.google.com/uc?export=download"
+    session = requests.Session()
+    
+    # 1. Initial request to check for the warning token
+    response = session.get(URL, params={'id': file_id}, stream=True)
+    
+    token = None
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            token = value
+            break
+
+    params = {'id': file_id}
+    if token:
+        st.info("Bypassing Google Drive large file warning...")
+        params['confirm'] = token
+        
+    # 2. Final request for the actual file content
+    response = session.get(URL, params=params, stream=True)
+    
+    # Check for HTML content (indicates failure due to restricted access)
+    if 'text/html' in response.headers.get('content-type', ''):
+        st.error("Download Failed: The response was HTML, not the model file. Check permissions.")
+        raise Exception("Google Drive link is inaccessible or non-public.")
+
+    response.raise_for_status()
+
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 8192
+    
+    st.info(f"Downloading model (approx. {total_size / (1024*1024):.2f} MB)...")
+    progress_bar = st.progress(0)
+
+    try:
+        downloaded_size = 0
+        with open(destination, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=block_size):
+                if chunk:
+                    f.write(chunk)
+                    downloaded_size += len(chunk)
+                    progress_bar.progress(min(100, int((downloaded_size / total_size) * 100)))
+        
+        if downloaded_size == 0:
+            raise Exception("Zero-byte file downloaded. The link is likely invalid or inaccessible.")
+
+        progress_bar.progress(100)
+        st.success("Model downloaded successfully!")
+
+    except Exception as e:
+        if os.path.exists(destination):
+            os.remove(destination)
+        raise e
+    finally:
+        progress_bar.empty()
+
+
 # --- Load the trained model ---
 @st.cache_resource
 def load_model():
     model_path = MODEL_PATH
     
-    # Check if the model is downloaded, if not, download it from Hugging Face
+    # Check if the model is downloaded, if not, download it
     if not os.path.exists(model_path):
-        st.warning(f"Model file not found. Attempting to download from Hugging Face Hub: {HF_REPO_ID}...")
+        st.warning(f"Model file not found at: {model_path}. Attempting to download from Google Drive...")
         try:
-            # Download the file using hf_hub_download
-            hf_hub_download(
-                repo_id=HF_REPO_ID, 
-                filename=HF_FILENAME, 
-                local_dir='.', # Download to the current directory
-                local_dir_use_symlinks=False
-            )
-            st.success("Model downloaded successfully from Hugging Face!")
+            download_file_from_google_drive(GDRIVE_FILE_ID, model_path)
         except Exception as e:
-            st.error(f"Error during model download from Hugging Face. Please check the repo ID and filename: {e}")
-            # Fallback for visibility: Try to clean up a potentially partial file
-            if os.path.exists(model_path):
-                os.remove(model_path)
+            st.error(f"Error during model download: {e}")
             return None
 
     # Load the model
@@ -54,7 +105,7 @@ def load_model():
         return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        st.error("Troubleshooting: Model file is present but corrupted or invalid. Ensure the file on Hugging Face is correct.")
+        st.error("FINAL TROUBLESHOOTING: The file downloaded is corrupted. You *must* verify the Google Drive file's sharing setting is set to **'Anyone with the link'**.")
         return None
 
 model = load_model()
@@ -73,7 +124,7 @@ st.title("🧠 Brain Tumor Classification")
 st.markdown("Upload a brain MRI image to get a tumor classification prediction.")
 
 if model is None:
-    st.warning("Model could not be loaded. Please ensure the model is uploaded correctly to the Hugging Face Hub, and the `requirements.txt` file is properly configured.")
+    st.warning("Model could not be loaded. Please ensure the Google Drive file is public and try again.")
 else:
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
