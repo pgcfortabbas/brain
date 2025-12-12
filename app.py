@@ -8,7 +8,7 @@ import requests
 
 # --- Google Drive Configuration ---
 # *** UPDATED FILE ID ***
-GDRIVE_FILE_ID = '18LzThwAFDKJQH99vyYcJAtdUPyaHvCZ5'
+GDRIVE_FILE_ID = '12Zm-LJUT3_iQW-4Hu1SXnybgHyKXlo04'
 # Using .h5 extension for maximum Keras compatibility
 MODEL_PATH = 'model.keros' 
 
