@@ -10,7 +10,7 @@ import requests
 # File ID from the Google Drive link provided:
 GDRIVE_FILE_ID = '1T3iiKWXTgMBW1zz26x88JVp6s2o1kAdE'
 # We use .h5 for the local file path to ensure maximum compatibility with tf.keras.models.load_model
-MODEL_PATH = 'brain_tumor_cnn_model.h5' 
+MODEL_PATH = 'brain_tumor_cnn_model.keros' 
 
 # Set Streamlit page config
 st.set_page_config(
