@@ -1,6 +1,5 @@
 streamlit
 tensorflow
 numpy
-pillow
-requests
-huggingface-hub
+Pillow
+gdown
